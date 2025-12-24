@@ -3,6 +3,7 @@ import lightgbm as lgb
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import average_precision_score
 import mlflow
+import os
 
 from features.feature_defs import build_features
 
@@ -10,6 +11,9 @@ mlflow.set_experiment("Fraud Detection Experiment")
 
 df = pd.read_csv('data/raw/creditcard.csv')
 df = build_features(df)
+
+os.makedirs('data/processed', exist_ok=True)
+df.to_parquet('data/processed/processed_df.parquet', index=False)
 
 X = df.drop(columns=['Class'])
 y = df['Class']

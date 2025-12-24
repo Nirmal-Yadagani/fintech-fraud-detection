@@ -7,6 +7,6 @@ def build_features(df: pd.DataFrame) -> pd.DataFrame:
     df['hour'] = (df['Time']//3600)%24
     df['is_night'] = df['hour'].between(0,5)
 
-    df['amount_log'] = np.log1p(df['Amount'].clip(0)+1)
+    df['amount_log'] = np.log1p(df['Amount'].clip(0))
 
     return df.drop(columns=['Amount','Time'])
