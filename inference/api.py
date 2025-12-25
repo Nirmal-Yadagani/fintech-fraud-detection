@@ -12,8 +12,9 @@ from features.feature_defs import build_features
 app = FastAPI(title='FinTech Fraud Scoring API')
 
 # load model from mlflow export
-model = mlflow.lightgbm.load_model(model_uri='mlruns/1/models/m-02dc49dabf354f86833888f88dc95e74/artifacts/')
-
+model_id = "c74c5fdac4d24d4aae7289dbec28987a"
+model_uri = f"models:/m-91ea0b0bbda34a18b89e4ad626341bf2"
+model = mlflow.lightgbm.load_model(model_uri=model_uri)
 
 class Transaction(BaseModel):
     Time: float
@@ -49,9 +50,9 @@ class Transaction(BaseModel):
 
 
 def fetch_transaction() -> Dict:
-    conn = psycopg2.connect(dbname='postgres', user='postgres')
+    conn = psycopg2.connect(dbname='postgres', user='postgres',password='postgres',host='127.0.0.1',port=5432)
     cursor = conn.cursor()
-    cursor.execute("""FROM online_tx ORDER BY Time DESC LIMIT 1;""")
+    cursor.execute("""SELECT * FROM online_tx ORDER BY Time DESC LIMIT 1;""")
     record = cursor.fetchone()
     cursor.close()
     conn.close()
@@ -59,8 +60,9 @@ def fetch_transaction() -> Dict:
     if not record:
         raise ValueError("Transaction not found in the database.")
 
+
     cols = ["Time"] + [f"V{i}" for i in range(1,29)] + ["Amount"]
-    return dict(zip(cols, record))
+    return dict(zip(cols, record[1:]))
 
 @app.post('/score')
 def score_tx(tx: Transaction):
@@ -73,9 +75,10 @@ def score_tx(tx: Transaction):
             'fraud_label': int(score > 0.7),
             }
 
-@app.post('/score_db')
-def score_tx_db():
+@app.post('/score_latest')
+def score_latest():
     tx = fetch_transaction()
+    print(tx)
     if not tx:
         return {'error': 'No transaction found in the database.'}
     df = pd.DataFrame([tx])
@@ -84,6 +87,12 @@ def score_tx_db():
     return {'fraud_risk_score': float(score),
             'fraud_label': int(score > 0.7),
             }
+
+
+@app.get("/score_db")
+def score_db_get():
+    return score_latest()  # reuse your existing function
+
 
 
 @app.get('/')
