@@ -2,16 +2,16 @@
 set -e
 
 echo "Starting Zookeeper..."
-./kafka_2.13-3.8.0/bin/zookeeper-server-start.sh ./kafka_2.13-3.8.0/config/zookeeper.properties > zk.log 2>&1 &
+kafka_2.13-3.8.0/bin/zookeeper-server-start.sh kafka_2.13-3.8.0/config/zookeeper.properties > zk.log 2>&1 &
 sleep 5
 
 echo "Starting Kafka broker..."
-./kafka_2.13-3.8.0/bin/kafka-server-start.sh ./kafka_2.13-3.8.0/config/server.properties > kafka.log 2>&1 &
+kafka_2.13-3.8.0/bin/kafka-server-start.sh kafka_2.13-3.8.0/config/server.properties > kafka.log 2>&1 &
 sleep 5
 
 echo "Creating topic (safe path for prod clusters)..."
-./kafka_2.13-3.8.0/bin/kafka-topics.sh --create \
-  --topic tx_stream \
+/home/nirmal-yadagani/kafka_2.13-3.8.0/bin/kafka-topics.sh --create \
+  --topic transactions \
   --bootstrap-server localhost:9092 \
   --partitions 3 \
   --replication-factor 1 \
@@ -21,6 +21,7 @@ sleep 2
 echo "Setting up Postgres table..."
 sudo -u postgres psql -c "
 CREATE TABLE IF NOT EXISTS online_tx (
+    tx_uid UUID PRIMARY KEY,
     Time FLOAT,
     $(for i in {1..28}; do echo -n "V$i FLOAT, "; done)
     Amount FLOAT
@@ -52,7 +53,7 @@ sleep 5
 echo "Verifying services..."
 jps  # shows Java processes like Kafka, Zookeeper
 echo "Kafka topics on broker:"
-./kafka_2.13-3.8.0/bin/kafka-topics.sh --list --bootstrap-server localhost:9092
+kafka_2.13-3.8.0/bin/kafka-topics.sh --list --bootstrap-server localhost:9092
 
 echo "API status:"
 curl -s http://localhost:8000/ | jq || echo "API not responding!!!"
