@@ -4,7 +4,6 @@ from fastapi import FastAPI
 import pandas as pd
 import lightgbm as lgb
 from pydantic import BaseModel
-import mlflow
 import psycopg2
 
 from features.feature_defs import build_features
@@ -12,9 +11,7 @@ from features.feature_defs import build_features
 app = FastAPI(title='FinTech Fraud Scoring API')
 
 # load model from mlflow export
-model_id = "c74c5fdac4d24d4aae7289dbec28987a"
-model_uri = f"models:/m-91ea0b0bbda34a18b89e4ad626341bf2"
-model = mlflow.lightgbm.load_model(model_uri=model_uri)
+model = lgb.Booster(model_file='training/model.txt')
 
 class Transaction(BaseModel):
     Time: float
@@ -50,7 +47,7 @@ class Transaction(BaseModel):
 
 
 def fetch_transaction() -> Dict:
-    conn = psycopg2.connect(dbname='postgres', user='postgres',password='postgres',host='127.0.0.1',port=5432)
+    conn = psycopg2.connect(dbname='postgres', user='postgres',password='postgres',host='infra-postgres-1',port=5432)
     cursor = conn.cursor()
     cursor.execute("""SELECT * FROM online_tx ORDER BY Time DESC LIMIT 1;""")
     record = cursor.fetchone()

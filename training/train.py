@@ -48,6 +48,8 @@ with mlflow.start_run():
     ap_score = average_precision_score(y_val, y_val_pred)
 
     mlflow.log_metric("val_ap", ap_score)
-    mlflow.lightgbm.log_model(model, artifact_path="lightgbm_model")
+    mlflow.lightgbm.log_model(model, name="lightgbm_model")
 
     print(f"Validation Average Precision: {ap_score:.4f}")
+
+    model.save_model('training/model.txt')

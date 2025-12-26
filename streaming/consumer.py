@@ -1,15 +1,30 @@
-import json
+import json, time
+import pandas as pd
 from kafka import KafkaConsumer
+from kafka.errors import NoBrokersAvailable
 import psycopg2
 import uuid
+from features.feature_defs import build_features
+import lightgbm as lgb
 
-consumer = KafkaConsumer(
-    'transactions',
-    bootstrap_servers='localhost:9092',
-    value_deserializer=lambda v: json.loads(v.decode('utf-8'))
-)
+model = lgb.Booster(model_file='training/model.txt')
 
-conn = psycopg2.connect(dbname='postgres',user='postgres',password='postgres',host='127.0.0.1',port=5432)
+EXPECTED_SCHEMA = ["Time"] + [f"V{i}" for i in range(1,29)] + ["Amount"]
+
+
+BOOTSTRAP = "kafka:9092" if "docker" in __file__.lower() else "localhost:9092"
+
+# Retry until Kafka is ready
+while True:
+    try:
+        consumer = KafkaConsumer("transactions", bootstrap_servers=BOOTSTRAP,value_deserializer=lambda v: json.loads(v.decode('utf-8')))
+        print("Kafka is ready! Consumer connected.")
+        break
+    except NoBrokersAvailable:
+        print("Waiting for Kafka broker...")
+        time.sleep(3)
+
+conn = psycopg2.connect(dbname='postgres',user='postgres',password='postgres',host='postgres',port=5432)
 cursor = conn.cursor()
 cursor.execute("DROP TABLE IF EXISTS online_tx;")
 cursor.execute("""CREATE TABLE IF NOT EXISTS online_tx (
@@ -49,8 +64,20 @@ cursor.execute("""CREATE TABLE IF NOT EXISTS online_tx (
 
 conn.commit()
 
+print("Started consuming & validating transactions...")
 for tx in consumer:
     transaction = tx.value
+
+    if sorted(transaction.keys()) != sorted(EXPECTED_SCHEMA):
+        print(f"Invalid transaction schema: {transaction}")
+        continue
+
+    df = pd.DataFrame([transaction])[EXPECTED_SCHEMA]
+    features = build_features(df)
+
+    score = float(model.predict(features)[0])
+    fraud = int(score > 0.7)
+
     transaction['tx_uid'] = str(uuid.uuid4())
     cols = ["tx_uid","Time","V1","V2","V3","V4","V5","V6","V7","V8","V9","V10",
         "V11","V12","V13","V14","V15","V16","V17","V18","V19","V20","V21","V22",
@@ -66,4 +93,5 @@ for tx in consumer:
         ON CONFLICT (tx_uid) DO NOTHING;
     """, values)
     conn.commit()
-    print(f"Consumed and stored transaction: {transaction}")
+    
+    print("Stored | Score:", round(score,4), "| Fraud:", fraud)
