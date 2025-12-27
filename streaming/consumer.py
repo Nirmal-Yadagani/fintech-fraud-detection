@@ -6,13 +6,14 @@ import psycopg2
 import uuid
 from features.feature_defs import build_features
 import lightgbm as lgb
+import os
 
 model = lgb.Booster(model_file='training/model.txt')
 
 EXPECTED_SCHEMA = ["Time"] + [f"V{i}" for i in range(1,29)] + ["Amount"]
 
 
-BOOTSTRAP = "kafka:9092" if "docker" in __file__.lower() else "localhost:9092"
+BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "localhost:9092")
 
 # Retry until Kafka is ready
 while True:
