@@ -1,69 +1,60 @@
 services:
-
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
+    container_name: zookeeper
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
-    ports:
-      - "2181:2181"
+    networks:
+      - kafka-net
 
   kafka:
     image: confluentinc/cp-kafka:7.5.0
-    depends_on: [zookeeper]
+    container_name: kafka
+    depends_on:
+      - zookeeper
     environment:
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,CONNECTIONS_FROM_HOST://localhost:19092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONNECTIONS_FROM_HOST:PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+    networks:
+      - kafka-net
     ports:
       - "9092:9092"
+      - "19092:19092"
 
+  
   create-topic:
     image: confluentinc/cp-kafka:7.5.0
-    depends_on: [kafka]
-    entrypoint: >
-      bash -c "sleep 5 &&
-      kafka-topics --create --topic tx_stream
-        --bootstrap-server kafka:9092
-        --partitions 3
-        --replication-factor 1
-        --if-not-exists"
-    restart: "no"
+    container_name: kafka_create_topic
+    depends_on:
+      - kafka
 
-  postgres:
-    image: postgres:15
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: postgres
-    ports:
-      - "5432:5432"
+    command: bash -c "
+      echo '⏳ Waiting for Kafka...' &&
+      cub kafka-ready -b kafka:9092 1 30 &&
+      kafka-topics --create --if-not-exists --topic transactions --bootstrap-server kafka:9092 --partitions 3 --replication-factor 1 &&
+      echo '✅ Topic created!'
+      "
+    networks:
+      - kafka-net
 
-  producer:
-    build:
-      context: ..
-      dockerfile: infra/Dockerfile.producer
-    depends_on: [create-topic]
-    environment:
-      - KAFKA_BOOTSTRAP=kafka:9092
 
-  consumer:
-    build:
-      context: ..
-      dockerfile: infra/Dockerfile.consumer
-    depends_on: [create-topic, postgres]
-    environment:
-      - KAFKA_BOOTSTRAP=kafka:9092
-      - POSTGRES_URL=postgres://postgres:postgres@postgres:5432/postgres
+  debug-container:
+    image: python:3.12-slim
+    container_name: debug-container
+    working_dir: /app
+    volumes:
+      - ./../streaming:/app/streaming
+      - ./../features:/app/features
+    tty: true        # Keep container alive
+    stdin_open: true # Allow interactive mode
+    command: bash -c "pip install kafka-python && bash"
+    networks:
+      - kafka-net
 
-  api:
-    build:
-      context: ..
-      dockerfile: infra/Dockerfile.api
-    depends_on: [consumer]
-    environment:
-      - KAFKA_BOOTSTRAP=kafka:9092
-      - POSTGRES_URL=postgres://postgres:postgres@postgres:5432/postgres
-    ports:
-      - "8000:8000"
+
+networks:
+  kafka-net:
+    driver: bridge
