@@ -12,7 +12,6 @@ model = lgb.Booster(model_file='training/model.txt')
 
 EXPECTED_SCHEMA = ["Time"] + [f"V{i}" for i in range(1,29)] + ["Amount"]
 
-
 BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "localhost:9092")
 
 # Retry until Kafka is ready
@@ -25,7 +24,7 @@ while True:
         print("Waiting for Kafka broker...")
         time.sleep(3)
 
-conn = psycopg2.connect(dbname='postgres',user='postgres',password='postgres',host='postgres',port=5432)
+conn = psycopg2.connect(dbname='frauddb',user='postgres',password='postgres',host='postgres',port=5432)
 cursor = conn.cursor()
 cursor.execute("DROP TABLE IF EXISTS online_tx;")
 cursor.execute("""CREATE TABLE IF NOT EXISTS online_tx (

@@ -47,7 +47,7 @@ class Transaction(BaseModel):
 
 
 def fetch_transaction() -> Dict:
-    conn = psycopg2.connect(dbname='postgres', user='postgres',password='postgres',host='infra-postgres-1',port=5432)
+    conn = psycopg2.connect(dbname='frauddb', user='postgres',password='postgres',host='postgres',port=5432)
     cursor = conn.cursor()
     cursor.execute("""SELECT * FROM online_tx ORDER BY Time DESC LIMIT 1;""")
     record = cursor.fetchone()

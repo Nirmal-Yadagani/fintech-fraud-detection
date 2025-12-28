@@ -28,7 +28,7 @@ params = {
     "objective": "binary",
     "metric": "aucpr",
     "boosting_type": "gbdt",
-    "device": "gpu",
+    "device": "cpu",
     "learning_rate": 0.05,
     "num_leaves": 64,
     "verbose": 100

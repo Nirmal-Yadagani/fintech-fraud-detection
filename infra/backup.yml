@@ -1,0 +1,15 @@
+debug-container:
+    image: python:3.12-slim
+    container_name: debug-container
+    working_dir: /app
+    volumes:
+      - ../data:/app/data
+      - ../streaming:/app/streaming
+      - ../features:/app/features
+      - ../training:/app/training
+      - ../inference:/app/inference
+    tty: true        # Keep container alive
+    stdin_open: true # Allow interactive mode
+    command: bash -c "pip install kafka-python && bash"
+    networks:
+      - kafka-net

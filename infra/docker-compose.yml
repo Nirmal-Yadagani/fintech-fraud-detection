@@ -7,6 +7,7 @@ services:
     networks:
       - kafka-net
 
+
   kafka:
     image: confluentinc/cp-kafka:7.5.0
     container_name: kafka
@@ -14,15 +15,12 @@ services:
       - zookeeper
     environment:
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,CONNECTIONS_FROM_HOST://localhost:19092
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONNECTIONS_FROM_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
     networks:
       - kafka-net
-    ports:
-      - "9092:9092"
-      - "19092:19092"
 
   
   create-topic:
@@ -35,22 +33,87 @@ services:
       echo '⏳ Waiting for Kafka...' &&
       cub kafka-ready -b kafka:9092 1 30 &&
       kafka-topics --create --if-not-exists --topic transactions --bootstrap-server kafka:9092 --partitions 3 --replication-factor 1 &&
-      echo '✅ Topic created!'
+      echo 'Topic created!'
       "
     networks:
       - kafka-net
 
 
-  debug-container:
-    image: python:3.12-slim
-    container_name: debug-container
-    working_dir: /app
-    volumes:
-      - ./../streaming:/app/streaming
-      - ./../features:/app/features
-    tty: true        # Keep container alive
-    stdin_open: true # Allow interactive mode
-    command: bash -c "pip install kafka-python && bash"
+  postgres:
+    image: postgres:15
+    container_name: postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: frauddb
+    restart: unless-stopped
+    networks:
+      - kafka-net
+
+
+  producer:
+    build:
+      context: ..
+      dockerfile_inline: |
+        FROM python:3.12-slim
+        WORKDIR /app
+        RUN apt update && apt install -y libgomp1 && rm -rf /var/lib/apt/lists/*
+        COPY streaming /app/streaming
+        COPY features /app/features
+        RUN pip install kafka-python numpy pandas
+        ENV PYTHONPATH=/app
+        CMD ["python3", "streaming/producer.py"]
+    container_name: producer
+    restart: unless-stopped
+    environment:
+      - KAFKA_BOOTSTRAP=kafka:9092
+    networks:
+      - kafka-net
+
+
+  consumer:
+    build:
+      context: ..
+      dockerfile_inline: |
+        FROM python:3.12-slim
+        WORKDIR /app
+        RUN apt update && apt install -y libgomp1 && rm -rf /var/lib/apt/lists/*
+        COPY streaming /app/streaming
+        COPY features /app/features
+        COPY training /app/training
+        RUN pip install kafka-python numpy pandas lightgbm psycopg2-binary
+        ENV PYTHONPATH=/app
+        CMD ["python3", "streaming/consumer.py"]
+    container_name: consumer
+    restart: unless-stopped
+    environment:
+      - KAFKA_BOOTSTRAP=kafka:9092
+      - POSTGRES_URL=postgres://postgres:postgres@postgres:5432/frauddb
+    networks:
+      - kafka-net
+
+
+  api:
+    build:
+      context: ..
+      dockerfile_inline: |
+        FROM python:3.12-slim
+        WORKDIR /app
+        RUN apt update && apt install -y libgomp1 && rm -rf /var/lib/apt/lists/*
+        COPY inference /app/inference
+        COPY features /app/features
+        COPY training /app/training
+        RUN pip install fastapi uvicorn kafka-python numpy pandas lightgbm psycopg2-binary
+        ENV PYTHONPATH=/app
+        ENV LIGHTGBM_USE_OPENCL=false
+        CMD ["uvicorn", "inference.api:app", "--host", "0.0.0.0", "--port", "8000"]
+    container_name: api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - KAFKA_BOOTSTRAP=kafka:9092
+      - POSTGRES_URL=postgres://postgres:postgres@postgres:5432/frauddb
     networks:
       - kafka-net
 
