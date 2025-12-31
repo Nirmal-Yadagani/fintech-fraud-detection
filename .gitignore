@@ -10,3 +10,6 @@ wheels/
 .venv
 
 start_kafka_server.cmd
+
+# mlruns
+mlruns/
