@@ -1,3 +1,5 @@
+import os
+
 import pandas as pd
 import xgboost as xgb
 from sklearn.model_selection import train_test_split
@@ -5,14 +7,14 @@ from sklearn.metrics import classification_report, roc_auc_score, average_precis
 import mlflow
 import mlflow.xgboost
 
+from utils.eval import log_metrics_to_mlflow
+
 df = pd.read_parquet("data/processed/processed_df.parquet")
 
 X = df.drop(columns=["Class"])
 y = df["Class"]
 
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, stratify=y)
-
-
 
 mlflow.set_tracking_uri("mlruns")
 exp = mlflow.set_experiment("Fraud Detection Experiment")
@@ -31,14 +33,29 @@ with mlflow.start_run(run_name="XGBoost_Fraud_Model", experiment_id=exp.experime
 
     ap_score = average_precision_score(y_test, y_pred_prob)
     auc_score = roc_auc_score(y_test, y_pred_prob)
-    clf_report = classification_report(y_test, y_pred_label)
+    tn, fp, fn, tp = pd.crosstab(y_test, y_pred_label).values.ravel()
+    recall = tp / (tp + fn + 1e-9)
+    precision = tp / (tp + fp + 1e-9)
+    fbeta = (1 + 2**2) * (precision * recall) / ((2**2 * precision) + recall + 1e-9)
 
-    mlflow.log_metric("val_ap", ap_score)
-    mlflow.log_metric("val_auc", auc_score)
-    # mlflow.log_text(f"clf_report: {clf_report}")
-    mlflow.sklearn.log_model(model, artifact_path="xgboost_model")
+    # Log metrics to mlflow
+    log_metrics_to_mlflow(
+        roc_auc=auc_score,
+        pr_auc=ap_score,
+        recall=recall,
+        precision=precision,
+        fbeta=fbeta,
+        tn=tn,
+        fp=fp,
+        fn=fn,
+        tp=tp
+    )
+
+    # Log model to mlflow
+    mlflow.xgboost.log_model(model, artifact_path="xgboost_model")
 
 
-    print(f"Validation Average Precision: {ap_score:.4f}")
-    print(f"Validation Roc Auc Score: {auc_score:.4f}")
-    print(f"Validation Classification Report: {clf_report}")
+# Save the trained model locally
+os.makedirs("models", exist_ok=True)
+model.save_model('models/model_xgb.json')
+print("XGBoost model training complete. Model saved to models/model_xgb.json")

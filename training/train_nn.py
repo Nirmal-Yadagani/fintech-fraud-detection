@@ -1,3 +1,5 @@
+import os
+
 import pandas as pd
 import torch
 import torch.nn as nn
@@ -8,8 +10,10 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import average_precision_score, classification_report, roc_auc_score
 import mlflow
 import mlflow.pytorch
-import os
 import numpy as np
+
+from utils.eval import log_metrics_to_mlflow
+
 
 # load data
 df = pd.read_parquet("data/processed/processed_df.parquet")
@@ -99,16 +103,29 @@ with mlflow.start_run(run_name="Torch_Classifier_FraudNN"):
     val_probs = np.array(val_probs).flatten()
     ap = average_precision_score(y_val, val_probs)
     auc = roc_auc_score(y_val, val_probs)
-    report = classification_report(y_val, (val_probs > 0.5).astype(int))
+    val_pred_labels = (val_probs >= 0.5).astype(int)
+    tn, fp, fn, tp = pd.crosstab(y_val, val_pred_labels).values.ravel()
+    recall = tp / (tp + fn + 1e-9)
+    precision = tp / (tp + fp + 1e-9)
+    fbeta = (1 + 2**2) * (precision * recall) / ((2**2 * precision) + recall + 1e-9)
 
-    mlflow.log_metric("val_ap", ap)
-    mlflow.log_metric("val_auc", auc)
-    print("\n", report)
+    # Log metrics to mlflow
+    log_metrics_to_mlflow(
+        roc_auc=auc,
+        pr_auc=ap,
+        recall=recall,
+        precision=precision,
+        fbeta=fbeta,
+        tn=tn,
+        fp=fp,
+        fn=fn,
+        tp=tp
+    )
 
     # Log model
     mlflow.pytorch.log_model(model, "fraudnn_model")
 
 # Save model locally too
-os.makedirs("training", exist_ok=True)
-torch.save(model.state_dict(), "training/fraudnn_torch.pt")
-print("Torch classifier model saved to training/fraudnn_torch.pt")
+os.makedirs("models", exist_ok=True)
+torch.save(model.state_dict(), "models/fraudnn_torch.pt")
+print("Torch classifier model saved to models/fraudnn_torch.pt")

@@ -1,3 +1,5 @@
+import os
+
 import pandas as pd
 import numpy as np
 import torch
@@ -7,10 +9,13 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 import mlflow
 import mlflow.pytorch
-import os
+
+from utils.eval import log_metrics_to_mlflow
+
 
 # Load data
 df = pd.read_parquet("data/processed/processed_df.parquet")
+print(df.columns)
 
 scale_cols = ["amount_log", "delta_t", "tx_count_30s", "tx_count_1min", "tx_count_5min",
               "amt_sum_1min", "amt_sum_5min", "amt_mean_5", "amt_std_5", "amt_dev",
@@ -97,10 +102,10 @@ with mlflow.start_run(run_name="Torch_AutoEncoder_Anomaly"):
         mlflow.log_metric("train_mse", avg_loss, step=epoch)
         print(f"Epoch {epoch} | Train MSE: {avg_loss:.5f}")
 
-    # Log model
+    # Log model to MLflow
     mlflow.pytorch.log_model(model, name="autoencoder_model")
 
-# ---- Generate anomaly scores on full dataset ----
+# Generate anomaly scores on full dataset
 model.eval()
 full_tensor = torch.tensor(total_df.drop(columns=['Class']).values, dtype=torch.float32).to(device)
 with torch.no_grad():
@@ -113,3 +118,8 @@ df["anomaly_score"] = mse
 os.makedirs("data/processed", exist_ok=True)
 df.to_parquet("data/processed/processed_with_autoencoder.parquet", index=False)
 print("Torch Autoencoder training complete. Anomaly scores saved!")
+
+# Save the trained model locally
+os.makedirs("models", exist_ok=True)
+torch.save(model.state_dict(), "models/autoencoder_model.pth")
+print("Autoencoder model saved to models/autoencoder_model.pth")

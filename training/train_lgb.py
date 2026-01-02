@@ -1,8 +1,12 @@
+import os
+
 import pandas as pd
 import lightgbm as lgb
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import average_precision_score, roc_auc_score, classification_report
 import mlflow
+
+from utils.eval import log_metrics_to_mlflow
 
 
 mlflow.set_experiment("Fraud Detection Experiment")
@@ -41,19 +45,33 @@ with mlflow.start_run("LightGBM_Fraud_Model", experiment_id=exp.experiment_id):
 
     y_pred_label = model.predict(X_val, num_iteration=model.best_iteration)
     y_pred_prob = model.predict_proba(X_val)[:,1]
-
+    tn, fp, fn, tp = pd.crosstab(y_val, (y_pred_prob > 0.5).astype(int)).values.ravel()
     ap_score = average_precision_score(y_val, y_pred_prob)
     auc_score = roc_auc_score(y_val, y_pred_prob)
-    clf_report = classification_report(y_val, y_pred_label)
+    ap = ap_score
+    auc = auc_score
+    recall = tp / (tp + fn + 1e-9)
+    precision = tp / (tp + fp + 1e-9)
+    fbeta = (1 + 2**2) * (precision * recall) / ((2**2 * precision) + recall + 1e-9)
 
+    # log metrics to MLflow
+    log_metrics_to_mlflow(
+        roc_auc=auc,
+        pr_auc=ap,
+        recall=recall,
+        precision=precision,
+        fbeta=fbeta,
+        tn=tn,
+        fp=fp,
+        fn=fn,
+        tp=tp
+    )
 
-    mlflow.log_metric("val_ap", ap_score)
-    mlflow.log_metric("val_auc", auc_score)
-    mlflow.log_text("clf_report", clf_report)
+    # Log model to MLflow
     mlflow.lightgbm.log_model(model, name="lightgbm_model")
 
-    print(f"Validation Average Precision: {ap_score:.4f}")
-    print(f"Validation Roc Auc Score: {auc_score:.4f}")
-    print(f"Validation Classification Report: {clf_report}")
 
-    model.save_model('training/model_lgb.txt')
+# Save the trained model locally
+os.makedirs("models", exist_ok=True)
+model.save_model('models/model_lgb.txt')
+print("LightGBM model training complete. Model saved to models/model_lgb.txt")
