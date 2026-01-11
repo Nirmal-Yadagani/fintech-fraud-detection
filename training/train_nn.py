@@ -1,4 +1,5 @@
 import os
+os.environ["MLFLOW_TRACKING_URI"] = "sqlite:///mlflow.db"
 
 import pandas as pd
 import torch
@@ -63,7 +64,7 @@ model = FraudNN(X_train_t.shape[1]).to(device)
 criterion = nn.BCELoss()
 optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
-mlflow.set_tracking_uri("mlruns")
+mlflow.set_tracking_uri("sqlite:///mlflow.db")
 mlflow.set_experiment("Fraud Detection Experiment")
 with mlflow.start_run(run_name="Torch_Classifier_FraudNN"):
     mlflow.log_param("model", "FraudNN_Torch")

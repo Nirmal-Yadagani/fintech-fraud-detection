@@ -1,4 +1,5 @@
 import os
+os.environ["MLFLOW_TRACKING_URI"] = "sqlite:///mlflow.db"
 
 import pandas as pd
 import lightgbm as lgb
@@ -7,9 +8,6 @@ from sklearn.metrics import average_precision_score, roc_auc_score, classificati
 import mlflow
 
 from utils.eval import log_metrics_to_mlflow
-
-
-mlflow.set_experiment("Fraud Detection Experiment")
 
 df = pd.read_parquet('data/processed/processed_df.parquet')
 
@@ -31,9 +29,9 @@ params = {
     "verbose": 100
 }
 
-mlflow.set_tracking_uri("mlruns")
-exp = mlflow.set_experiment("Fraud Detection Experiment")
-with mlflow.start_run("LightGBM_Fraud_Model", experiment_id=exp.experiment_id):
+mlflow.set_tracking_uri("sqlite:///mlflow.db")
+mlflow.set_experiment("Fraud Detection Experiment")
+with mlflow.start_run(run_name="LightGBM_Fraud_Model"):
     mlflow.log_params(params)
 
     model = lgb.train(
@@ -44,7 +42,7 @@ with mlflow.start_run("LightGBM_Fraud_Model", experiment_id=exp.experiment_id):
     )
 
     y_pred_label = model.predict(X_val, num_iteration=model.best_iteration)
-    y_pred_prob = model.predict_proba(X_val)[:,1]
+    y_pred_prob = model.predict(X_val, raw_score=True)
     tn, fp, fn, tp = pd.crosstab(y_val, (y_pred_prob > 0.5).astype(int)).values.ravel()
     ap_score = average_precision_score(y_val, y_pred_prob)
     auc_score = roc_auc_score(y_val, y_pred_prob)

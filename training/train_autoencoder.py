@@ -1,4 +1,5 @@
 import os
+os.environ["MLFLOW_TRACKING_URI"] = "sqlite:///mlflow.db"
 
 import pandas as pd
 import numpy as np
@@ -77,7 +78,8 @@ model = AutoEncoder(train_tensor.shape[1]).to(device)
 criterion = nn.MSELoss()
 optimizer = torch.optim.SGD(model.parameters(), lr=1e-2)
 
-mlflow.set_tracking_uri("mlruns")
+mlflow.set_tracking_uri("sqlite:///mlflow.db")
+print(mlflow.get_tracking_uri())
 mlflow.set_experiment("Fraud Detection Experiment")
 with mlflow.start_run(run_name="Torch_AutoEncoder_Anomaly"):
     mlflow.log_param("model_type", "autoencoder_torch")
